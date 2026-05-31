@@ -14,7 +14,7 @@ Starting from three bare Linux machines on a home LAN, the following was operati
 - Two clinical AI Streamlit apps with Traefik ingress (`pv.lan`, `ams.lan`)
 - Argus Discord bot connected to pv-workbench backend
 - GitLab CI/CD building and deploying images on push to main
-- 24 agency services migrated from Podman systemd quadlets to k3s — live, no data loss
+- 24 agency services migrated from Podman systemd quadlets to k3s - live, no data loss
 - PostgreSQL 16 data preserved via hostPath PVCs (zero dump/restore)
 - Cloudflare tunnel routing `ringcatch.io` and `dashboard.ringcatch.io` through the cluster
 
@@ -93,7 +93,7 @@ LLM Routing (pv-workbench / argus):
 
 ---
 
-## Phase 1 — Cluster Setup
+## Phase 1 - Cluster Setup
 
 ### Control plane (MikePC)
 
@@ -111,7 +111,7 @@ curl -sfL https://get.k3s.io | env K3S_URL=https://192.168.4.54:6443 K3S_TOKEN=<
 
 ### NVIDIA GPU (MikePC)
 
-k3s **auto-configures the NVIDIA container runtime** — no manual `config.toml.tmpl` needed. Install the toolkit, configure it, restart k3s:
+k3s **auto-configures the NVIDIA container runtime** - no manual `config.toml.tmpl` needed. Install the toolkit, configure it, restart k3s:
 
 ```bash
 sudo apt install nvidia-container-toolkit
@@ -125,7 +125,7 @@ Deploy the device plugin:
 kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/main/deployments/static/nvidia-device-plugin.yml
 ```
 
-Create a RuntimeClass (required — resource limits alone are not enough):
+Create a RuntimeClass (required - resource limits alone are not enough):
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -148,7 +148,7 @@ spec:
 
 ---
 
-## Phase 2 — Clinical AI Platform (namespace: ai)
+## Phase 2 - Clinical AI Platform (namespace: ai)
 
 All pods use `nodeSelector: kubernetes.io/hostname: mikepc` to pin to the GPU node. Manifests: [`homelab-infra/k8s/`](https://gitlab.com/molszewski423/homelab-infra).
 
@@ -170,15 +170,15 @@ kubectl exec -n ai deploy/ollama -- ollama pull gemma4:26b
 
 ---
 
-## Phase 3 — Agency Migration (namespace: agency)
+## Phase 3 - Agency Migration (namespace: agency)
 
 ### Background
 
-RingCatch ran as 24 Podman rootless systemd quadlets on archbox — one `.container` unit file per service, environment from `~/agency/.env`. Worked for a single machine. No rolling updates, no health routing, rebuilds required manual restarts.
+RingCatch ran as 24 Podman rootless systemd quadlets on archbox - one `.container` unit file per service, environment from `~/agency/.env`. Worked for a single machine. No rolling updates, no health routing, rebuilds required manual restarts.
 
 ### Approach
 
-Each Podman unit → Kubernetes Deployment + Service. All 24 pinned to archbox via `nodeSelector`. PostgreSQL uses a hostPath PV pointing at the existing Podman volume data directory — no dump/restore required.
+Each Podman unit → Kubernetes Deployment + Service. All 24 pinned to archbox via `nodeSelector`. PostgreSQL uses a hostPath PV pointing at the existing Podman volume data directory - no dump/restore required.
 
 Secrets: `~/agency/.env` → `kubectl create secret generic agency-env --from-env-file=.env`
 
@@ -197,7 +197,7 @@ sudo chown -R 1000:1000 /path/to/n8n-data/
 
 **localhost refs break when a Podman pod splits to k3s pods**
 
-Inside a Podman pod, all containers share a network namespace — `localhost:8080` reaches any container. In k3s, each Deployment is an isolated pod. Every `localhost`/`127.0.0.1` service reference must become a Kubernetes DNS name.
+Inside a Podman pod, all containers share a network namespace - `localhost:8080` reaches any container. In k3s, each Deployment is an isolated pod. Every `localhost`/`127.0.0.1` service reference must become a Kubernetes DNS name.
 
 ```
 # Before
@@ -207,18 +207,18 @@ ORCHESTRATOR_URL=http://127.0.0.1:8109
 ORCHESTRATOR_URL=http://agency-orchestrator:8109
 ```
 
-This broke the command dashboard health checks (13 hardcoded `127.0.0.1` URLs) and the Discord bot alert path — all had to be updated to k8s service names.
+This broke the command dashboard health checks (13 hardcoded `127.0.0.1` URLs) and the Discord bot alert path - all had to be updated to k8s service names.
 
 **hostPort + rolling updates conflict**
 
-Rolling updates create the new pod before terminating the old one. Two pods cannot bind the same hostPort simultaneously — the new pod stays `Pending`. Fix: either avoid hostPort (use Traefik ingress + ClusterIP), or manually delete the old pod before a rolling update.
+Rolling updates create the new pod before terminating the old one. Two pods cannot bind the same hostPort simultaneously - the new pod stays `Pending`. Fix: either avoid hostPort (use Traefik ingress + ClusterIP), or manually delete the old pod before a rolling update.
 
 **Local images not in k3s containerd**
 
 Agency images were built locally with Podman and not in any registry. k3s/containerd cannot see Podman's image store. Fix:
 
 ```bash
-# On archbox — export from Podman, import into k3s
+# On archbox - export from Podman, import into k3s
 podman save localhost/agency-orchestrator:latest | sudo k3s ctr -n k8s.io images import -
 ```
 
@@ -230,11 +230,11 @@ The n8n `config` file had stored a literal placeholder `{N8N_ENCRYPTION_KEY}` as
 
 **Cloudflare tunnel initContainer (distroless image)**
 
-The tunnel purge script used `/bin/sh` via an initContainer on the cloudflared image. cloudflared is distroless — no shell available. Fix: remove the initContainer and run the purge directly via the Cloudflare API instead.
+The tunnel purge script used `/bin/sh` via an initContainer on the cloudflared image. cloudflared is distroless - no shell available. Fix: remove the initContainer and run the purge directly via the Cloudflare API instead.
 
 ---
 
-## Phase 4 — Third Node (MikeInspiron)
+## Phase 4 - Third Node (MikeInspiron)
 
 Dell Inspiron joining as a 24/7 worker with lid closed. Sleep prevention required:
 
@@ -242,12 +242,12 @@ Dell Inspiron joining as a 24/7 worker with lid closed. Sleep prevention require
 sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 ```
 
-Hyprland configured for lid-close → display off, lid-open → display on via `bindl` — systemd-logind set to ignore lid events. The machine stays logged in for occasional local use.
+Hyprland configured for lid-close → display off, lid-open → display on via `bindl` - systemd-logind set to ignore lid events. The machine stays logged in for occasional local use.
 
-Join command (Fish shell — note `env` syntax):
+Join command (Fish shell - note `env` syntax):
 
 ```bash
-# Set token first — Fish does not support KEY=VAL cmd syntax
+# Set token first - Fish does not support KEY=VAL cmd syntax
 set TOKEN <node-token>
 curl -sfL https://get.k3s.io | sudo env K3S_URL=https://192.168.4.54:6443 K3S_TOKEN=$TOKEN sh -
 ```
@@ -256,7 +256,7 @@ curl -sfL https://get.k3s.io | sudo env K3S_URL=https://192.168.4.54:6443 K3S_TO
 
 ## Key Lessons
 
-### k3s auto-configures NVIDIA runtime — no config.toml.tmpl needed
+### k3s auto-configures NVIDIA runtime - no config.toml.tmpl needed
 
 Many guides instruct you to write a `config.toml.tmpl` for k3s containerd. This is unnecessary and breaks things if done manually. k3s generates its containerd config at startup. Install `nvidia-container-toolkit`, run `nvidia-ctk runtime configure --runtime=containerd`, restart k3s.
 
@@ -264,7 +264,7 @@ Many guides instruct you to write a `config.toml.tmpl` for k3s containerd. This 
 
 `nvidia.com/gpu: "1"` in resource limits is necessary but not sufficient. Without `runtimeClassName: nvidia`, the pod schedules but the GPU is inaccessible. Both are required.
 
-### hostPort conflicts with rolling updates — avoid or manage manually
+### hostPort conflicts with rolling updates - avoid or manage manually
 
 hostPort prevents two pods from running simultaneously on the same node. Rolling updates require overlap. Either use Traefik ingress + ClusterIP (preferred), or `kubectl delete pod` the old pod manually before updating.
 
@@ -299,9 +299,9 @@ env K3S_TOKEN=abc sh -
 | Workload | Target |
 |---|---|
 | Stateless landing pages, webhook handlers | AWS EC2 t2.micro / Lambda (free tier) |
-| LLM inference | On-prem MikePC — RTX 5060 Ti, cloud GPU is too expensive |
-| Stateful databases, agency services | On-prem archbox — data sovereignty, zero egress cost |
-| Clinical AI | On-prem — HIPAA sensitivity, GPU dependency |
+| LLM inference | On-prem MikePC - RTX 5060 Ti, cloud GPU is too expensive |
+| Stateful databases, agency services | On-prem archbox - data sovereignty, zero egress cost |
+| Clinical AI | On-prem - HIPAA sensitivity, GPU dependency |
 
 Tailscale will bridge on-prem and AWS nodes. Same k3s manifests, new node pool added to the cluster.
 
@@ -314,5 +314,5 @@ Tailscale will bridge on-prem and AWS nodes. Same k3s manifests, new node pool a
 | [homelab-infra](https://gitlab.com/molszewski423/homelab-infra) | All k3s manifests (ai + agency namespaces) |
 | [pv-workbench](https://gitlab.com/molszewski423/pv-workbench) | Pharmacovigilance platform |
 | [ams-intelligence](https://gitlab.com/molszewski423/ams-intelligence) | Antimicrobial stewardship platform |
-| [ringcatch-agency](https://gitlab.com/molszewski423/ringcatch-agency) | RingCatch AI agency — 24 k3s services |
+| [ringcatch-agency](https://gitlab.com/molszewski423/ringcatch-agency) | RingCatch AI agency - 24 k3s services |
 | [dotfiles](https://gitlab.com/molszewski423/dotfiles) | Fish, Hyprland, Kitty, Neovim |
