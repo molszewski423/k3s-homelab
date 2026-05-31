@@ -1,12 +1,12 @@
 # k3s-homelab
 
-A complete 3-node k3s homelab built in one day (2026-05-31), running two production namespaces: a clinical AI platform with RTX 5060 Ti GPU inference, and a 24-service AI agency stack migrated live from Podman.
+A complete 3-node k3s homelab built over a weekend (May 2026), running two production namespaces: a clinical AI platform with RTX 5060 Ti GPU inference, and a 24-service AI agency stack migrated live from Podman.
 
 ---
 
 ## What Was Built
 
-Starting from three bare Linux machines on a home LAN, the following was operational by end of day:
+Starting from three bare Linux machines on a home LAN, the following was operational by end of the weekend:
 
 - k3s v1.35 cluster, 3 nodes joined and healthy
 - RTX 5060 Ti GPU exposed to Kubernetes via NVIDIA device plugin + RuntimeClass
