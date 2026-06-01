@@ -259,6 +259,27 @@ chain ts-input {
 
 k3s Flannel CNI and kube-proxy chains are managed automatically by k3s. CrowdSec firewall bouncer injects ban rules into the same nftables ruleset.
 
+### nftables Firewall
+
+All three nodes run a default-deny INPUT firewall via a custom `inet homelab` nftables table (priority -10, runs before k3s/Flannel/CrowdSec chains). Applied at boot via `homelab-firewall.service`.
+
+```
+Accepted inbound:
+  - Loopback
+  - Established / related connections
+  - ICMP + ICMPv6
+  - Tailscale interface (tailscale0)
+  - UDP 41641 (Tailscale handshake)
+  - 192.168.4.0/24 (LAN)
+  - 10.42.0.0/16 (k3s pod network)
+  - 10.43.0.0/16 (k3s service network)
+
+Everything else: DROP
+```
+
+Config: `/etc/nftables-homelab.conf` on each node
+Service: `homelab-firewall.service` (enabled, persists across reboots)
+
 ### kubeconfig
 
 `/etc/rancher/k3s/k3s.yaml` is root-only (600). Each user accesses the cluster via a personal copy at `~/.kube/config` with `KUBECONFIG` set explicitly in fish config. Cluster credentials are never world-readable.
