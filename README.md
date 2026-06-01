@@ -198,6 +198,73 @@ curl -sfL https://get.k3s.io | sudo env K3S_URL=https://192.168.4.54:6443 K3S_TO
 
 ---
 
+
+## Network Security
+
+The homelab runs defense-in-depth across four layers: no open inbound ports, DNS filtering, IDS/IPS with automatic firewall enforcement, and Tailscale mesh for inter-node traffic. All layers run on archbox as the 24/7 perimeter node.
+
+### No Open Inbound Ports
+
+All public traffic enters via **Cloudflare Tunnel** — an outbound-only connection from `agency-tunnel` to Cloudflare's edge. There are no open inbound ports on any machine. The attack surface for public-facing services is zero.
+
+```
+Internet → Cloudflare Edge → Cloudflare Tunnel (outbound from archbox) → k3s services
+```
+
+SSH is accessible only from LAN (192.168.4.x) and Tailscale mesh — never exposed publicly.
+
+### CrowdSec (IDS/IPS)
+
+CrowdSec agent + firewall bouncer running on archbox, integrated with nftables.
+
+| Component | Detail |
+|---|---|
+| Agent | Parses logs, detects threats, shares signals with CAPI |
+| Firewall bouncer | Enforces bans via nftables rules in real time |
+| Community blocklist | 28,850+ IPs blocked from CrowdSec CAPI |
+| SSH bans | 32,215 brute-force IPs blocked |
+| Collections | `crowdsecurity/linux` · `crowdsecurity/sshd` · `crowdsecurity/auditd` · `crowdsecurity/whitelist-good-actors` |
+
+CrowdSec's community threat intelligence (CAPI) automatically syncs blocklists from global signal sharing — attacks detected on any CrowdSec deployment worldwide feed into the shared blocklist.
+
+### AdGuard Home (DNS Filtering)
+
+Network-level DNS filtering on archbox, serving all LAN clients.
+
+| Setting | Value |
+|---|---|
+| Listen port | 53 |
+| Upstream DNS | Cloudflare DoH (`https://dns.cloudflare.com/dns-query`) · Google DoH (`https://dns.google/dns-query`) · Cloudflare DoT (`tls://1.1.1.1`) |
+| Bootstrap | 1.1.1.1 · 8.8.8.8 |
+| Filtering | Enabled (blocklists) |
+| Safe browsing | Enabled |
+| Admin UI | `:3000` (LAN only) |
+
+All DNS queries from LAN machines resolve through AdGuard Home. Upstream queries use DNS-over-HTTPS and DNS-over-TLS — no plaintext DNS leaves the network.
+
+### Tailscale + nftables
+
+Inter-node communication (archbox ↔ mikepc ↔ mikeinspiron) uses Tailscale mesh. The nftables ruleset enforces this:
+
+```
+chain ts-input {
+    # Accept all Tailscale interface traffic
+    iifname "tailscale0*"  accept
+    # Allow Tailscale UDP handshake
+    udp dport 41641        accept
+    # Drop non-Tailscale traffic from CGNAT range
+    iifname != "tailscale0*" ip saddr 100.64.0.0/10  drop
+}
+```
+
+k3s Flannel CNI and kube-proxy chains are managed automatically by k3s. CrowdSec firewall bouncer injects ban rules into the same nftables ruleset.
+
+### kubeconfig
+
+`/etc/rancher/k3s/k3s.yaml` is root-only (600). Each user accesses the cluster via a personal copy at `~/.kube/config` with `KUBECONFIG` set explicitly in fish config. Cluster credentials are never world-readable.
+
+---
+
 ## Key Lessons
 
 ### k3s auto-configures NVIDIA runtime - no config.toml.tmpl needed
