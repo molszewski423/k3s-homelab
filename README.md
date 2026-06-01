@@ -339,6 +339,16 @@ Tailscale will bridge on-prem and AWS nodes. Same k3s manifests, new node pool a
 
 ---
 
+## Terraform
+
+Cloudflare DNS and tunnel ingress are managed as code in `homelab-infra/terraform/cloudflare/`. Applied once the cluster was stable — DNS records, tunnel config, and ingress rules all version-controlled.
+
+AWS EC2 Terraform is written and ready in `homelab-infra/terraform/aws/` for the planned hybrid phase (stateless public services on EC2, stateful workloads and LLM inference on-prem). Not yet applied.
+
+See [homelab-infra](https://gitlab.com/molszewski423/homelab-infra) for the full Terraform structure.
+
+---
+
 ## Related Repos
 
 | Repo | Description |
