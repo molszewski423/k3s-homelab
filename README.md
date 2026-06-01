@@ -22,63 +22,7 @@ Starting from three bare Linux machines on a home LAN, the following was operati
 
 ## Architecture
 
-```
-                              INTERNET
-                                  |
-                         [Cloudflare Tunnel]
-                           (no open ports)
-                                  |
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  k3s CLUSTER  (LAN: 192.168.4.x,  k3s v1.35)                               │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  mikepc  192.168.4.54 / Tailscale 100.97.45.57                       │  │
-│  │  Debian 13 · RTX 5060 Ti 16 GB                                        │  │
-│  │  ROLE: control plane + GPU worker                                     │  │
-│  │                                                                        │  │
-│  │  namespace: ai         nodeSelector: kubernetes.io/hostname=mikepc    │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐    │  │
-│  │  │ ollama [GPU]                                                   │    │  │
-│  │  │   gemma4:26b  gemma4:e4b  qwen3:30b  qwen2.5:7b              │    │  │
-│  │  │   nomic-embed-text                                            │    │  │
-│  │  │ pv-workbench  ─────────────────────────► http://pv.lan        │    │  │
-│  │  │ ams-intelligence ──────────────────────► http://ams.lan       │    │  │
-│  │  │ argus-bot (Discord Argus#1432)                                 │    │  │
-│  │  │ traefik (ingress controller, k3s built-in)                     │    │  │
-│  │  └──────────────────────────────────────────────────────────────┘    │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  archbox  192.168.4.46 / Tailscale 100.96.122.27                     │  │
-│  │  Arch Linux · Intel i3-4130T · 24/7 server                           │  │
-│  │  ROLE: worker                                                         │  │
-│  │                                                                        │  │
-│  │  namespace: agency     nodeSelector: kubernetes.io/hostname=archbox   │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐    │  │
-│  │  │ orchestrator  outreach    scraper     landing    command      │    │  │
-│  │  │ discord       billing     legal       marketing  support      │    │  │
-│  │  │ success       bi          sales       cfo        inbox        │    │  │
-│  │  │ delivery      video       dashboard   n8n        calcom       │    │  │
-│  │  │ kokoro        voice       tunnel                              │    │  │
-│  │  │ postgresql-16  (hostPath PVC → Podman volume data)            │    │  │
-│  │  └──────────────────────────────────────────────────────────────┘    │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  mikeinspiron  192.168.4.33                                           │  │
-│  │  Debian 13 · Dell Inspiron · Hyprland · 24/7 lid-closed              │  │
-│  │  ROLE: worker (general capacity, sleep masked)                        │  │
-│  └──────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-LLM Routing (agency orchestrator):
-  Gemini 2.5 Flash → Ollama gemma4:26b → Groq llama-3.3-70b → Groq llama-3.1-8b
-
-LLM Routing (pv-workbench / argus):
-  REASON_MODEL  gemma4:26b   regulatory Q&A, signal detection, MedDRA
-  DRAFT_MODEL   gemma4:e4b   ICSR narratives, literature digests
-  CHAT_MODEL    qwen2.5:7b   intent routing, Discord general chat (fast path)
-```
+![Architecture](docs/architecture.png)
 
 ---
 
