@@ -2,6 +2,13 @@
 
 A complete 3-node k3s homelab built over a weekend (May 2026), running two production namespaces: a clinical AI platform with RTX 5060 Ti GPU inference, and a 24-service AI agency stack migrated live from Podman.
 
+> **This is a build narrative, not a live status page.** Phases 1-4 below are historical
+> record of what was actually built at the time and are left as-is. For current cluster
+> state (node list, k3s version, what's pinned where), see
+> [homelab-infra](https://gitlab.com/molszewski423/homelab-infra) — that repo's docs are
+> the ones kept in sync with reality. This file gets new phases appended for major events,
+> not rewritten.
+
 ---
 
 ## What Was Built
@@ -196,6 +203,52 @@ set TOKEN <node-token>
 curl -sfL https://get.k3s.io | sudo env K3S_URL=https://192.168.4.54:6443 K3S_TOKEN=$TOKEN sh -
 ```
 
+Despite this, MikeInspiron never durably showed up in `kubectl get nodes` after this
+weekend — repeated join attempts, never confirmed stable. See Phase 5.
+
+---
+
+## Phase 5 - Third Node Reimaged (2026-07-25)
+
+The MikeInspiron join from Phase 4 never actually stuck. Two months later, the same
+physical Dell Inspiron was wiped and reimaged to **CentOS Stream 10**, rejoined as node
+`centosbook` — the first time this node durably appears in `kubectl get nodes`.
+
+Deliberately a different distro than the other two nodes (Debian on mikepc, Arch on
+archbox) rather than a third identical image — keeps manifests honest about distro-specific
+assumptions, and doubles as a standing environment for the RHEL/CentOS Stream ecosystem.
+
+Two new problems surfaced immediately, both specific to this node:
+
+**Tailscale silently breaks DNS for any pod scheduled here.** Tailscale on Linux rewrites
+`/etc/resolv.conf` to point at its own MagicDNS resolver (`100.100.100.100`). CoreDNS has
+no nodeSelector, so nothing stopped its single replica from landing on centosbook and
+inheriting that resolv.conf — and MagicDNS wasn't reachable from the pod netns, so **every
+DNS lookup cluster-wide failed**, including the Cloudflare tunnel's own lookups. Took
+ringcatch.io down.
+
+```bash
+sudo tailscale set --accept-dns=false
+kubectl rollout restart deployment/coredns -n kube-system
+```
+
+**firewalld drops forwarded pod traffic even with the right ports open.** Unlike
+archbox/mikepc, CentOS Stream ships `firewalld` active by default. Its `public` zone only
+covers the physical NIC — `flannel.1`/`cni0` aren't zone members, so traffic *forwarded*
+from other nodes gets dropped even though the flannel VXLAN port (8472/udp) and kubelet
+(10250/tcp) show as open in `firewall-cmd --list-all`. Fix: trust the cluster CIDRs instead
+of fighting individual interface rules:
+
+```bash
+sudo firewall-cmd --permanent --zone=trusted --add-source=10.42.0.0/16   # pod CIDR
+sudo firewall-cmd --permanent --zone=trusted --add-source=10.43.0.0/16   # service CIDR
+sudo firewall-cmd --reload
+```
+
+Once both were fixed, `agency-landing` was moved here — the first `agency-*` service off
+archbox, and the only one that could move without a storage migration (every other agency
+service shares one `hostPath` PVC hard-pinned to archbox).
+
 ---
 
 
@@ -242,26 +295,18 @@ Network-level DNS filtering on archbox, serving all LAN clients.
 
 All DNS queries from LAN machines resolve through AdGuard Home. Upstream queries use DNS-over-HTTPS and DNS-over-TLS — no plaintext DNS leaves the network.
 
-### Tailscale + nftables
-
-Inter-node communication (archbox ↔ mikepc ↔ mikeinspiron) uses Tailscale mesh. The nftables ruleset enforces this:
-
-```
-chain ts-input {
-    # Accept all Tailscale interface traffic
-    iifname "tailscale0*"  accept
-    # Allow Tailscale UDP handshake
-    udp dport 41641        accept
-    # Drop non-Tailscale traffic from CGNAT range
-    iifname != "tailscale0*" ip saddr 100.64.0.0/10  drop
-}
-```
-
-k3s Flannel CNI and kube-proxy chains are managed automatically by k3s. CrowdSec firewall bouncer injects ban rules into the same nftables ruleset.
-
 ### nftables Firewall
 
-All three nodes run a default-deny INPUT firewall via a custom `inet homelab` nftables table (priority -10, runs before k3s/Flannel/CrowdSec chains). Applied at boot via `homelab-firewall.service`.
+Inter-node k3s traffic (flannel VXLAN, kube-proxy) runs over the **plain LAN**
+(192.168.4.x), not Tailscale — migrated off Tailscale-based flannel 2026-06-01 after it
+broke on a MikePC IP change. Tailscale is kept on all nodes for remote administrative
+access only (SSH from outside the LAN), not cluster traffic.
+
+All three nodes run a default-deny INPUT firewall via a single custom `inet homelab`
+nftables table (priority -10, runs before k3s/Flannel/CrowdSec chains) — this is the
+actual, live ruleset, not the separate `ts-input` chain an earlier draft of this doc
+described (that chain was never actually implemented; everything below has always lived
+in one merged table):
 
 ```
 Accepted inbound:
@@ -277,8 +322,14 @@ Accepted inbound:
 Everything else: DROP
 ```
 
+k3s Flannel CNI and kube-proxy chains are managed automatically by k3s, alongside this
+table. CrowdSec's firewall bouncer injects ban rules into the same ruleset.
+
 Config: `/etc/nftables-homelab.conf` on each node
 Service: `homelab-firewall.service` (enabled, persists across reboots)
+
+centosbook (Phase 5) additionally runs `firewalld`, CentOS's default — see Phase 5 above
+for why that needed its own separate fix on top of this table.
 
 ### kubeconfig
 
