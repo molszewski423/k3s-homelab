@@ -251,6 +251,68 @@ service shares one `hostPath` PVC hard-pinned to archbox).
 
 ---
 
+## Phase 6 - archbox Rebuilt as debianbox (2026-07-26)
+
+archbox's last Arch update broke reboot reliability. Rather than keep chasing it, the box
+was wiped and reinstalled as **Debian 13**, rejoined as a **new** k3s node named
+`debianbox` — same hardware (i3-4130T), same LAN IP (192.168.4.45), new Tailscale IP
+(100.80.218.77; the old 100.96.122.27 was retired). k3s identifies nodes by hostname, so
+this was a real node replacement, not an in-place rename: the old `archbox` node object
+was deleted from the cluster once `debianbox` was confirmed healthy.
+
+This turned into the highest-risk step in the cluster's history so far, because archbox
+held real persistent state, not just running pods — every `agency-*` hostPath PV
+(postgres/n8n/data/voice) and the Prometheus/Grafana local-path volumes had `nodeAffinity`
+hardcoded to the old hostname, and none of those pods could reschedule anywhere until every
+one of those references was rebuilt to point at `debianbox`. Full restore order: base OS →
+SSH host+user keys (restored byte-identical from backup, so `known_hosts` on other machines
+never even flagged a mismatch) → Tailscale → nftables/CrowdSec/AdGuard → the four hostPath
+volumes (verified against the pre-wipe `pg_dump` — row counts matched exactly) → k3s-agent
+join → PV/PVC nodeAffinity rebuild (had to delete+recreate all four PVs, which required
+force-clearing `pv-protection` finalizers since the bound PVCs blocked deletion) →
+Prometheus/Grafana PVs (Delete-policy, discovered mid-migration that these are
+operator-managed via `Prometheus`/`Alertmanager` CRDs — patching the generated StatefulSet
+directly gets silently reverted by the operator's reconciliation loop, had to patch the
+CRs instead) → `~/agency` + `~/homelab-infra` source restore → rebuild all 17 custom
+`agency-*` container images from scratch, since none of them existed anywhere but the old
+node's local containerd (no shared registry).
+
+Two real build-environment bugs surfaced during the image rebuild, both looked identical
+from the outside (a hung `podman build` with flat CPU and no error) but had unrelated
+causes — worth knowing since diagnosing the wrong one wastes real time:
+- Rootless podman's `pasta` network backend let IPv6 connect successfully to at least one
+  external registry (`mcr.microsoft.com`) and then hang forever with zero throughput —
+  `curl -4` to the same host worked instantly. Fixed with `pasta_options = ["-4"]` in
+  `~/.config/containers/containers.conf` (a host-level `sysctl disable_ipv6` on the
+  physical interface alone does NOT propagate into pasta's synthetic network namespace —
+  needed both).
+- Separately, any Containerfile installing `tzdata` via apt on a Debian/Ubuntu base hangs
+  forever on an interactive "Geographic area:" prompt with no TTY to answer it unless
+  `ENV DEBIAN_FRONTEND=noninteractive` is set first. This is what was actually wrong with
+  the `agency-scraper` build (Ubuntu-based Playwright image) — cost real time being
+  misdiagnosed as the same IPv6 issue before checking the actual build log output instead
+  of just CPU/network activity.
+
+Also found and fixed along the way, unrelated to the rebuild itself but surfaced by it:
+Tailscale's tailnet-wide MagicDNS nameserver was pointed at archbox's old (now-dead)
+Tailscale IP — since AdGuard Home runs on this node, every Tailscale-enabled device on the
+tailnet lost DNS/internet the moment archbox went away, until the admin console's DNS tab
+was updated to point at debianbox's new Tailscale IP instead. And a whole-host nftables
+firewall table (`inet homelab`, distinct from the RingCatch-specific `ringcatch_firewall`
+table documented in [Network Security](#network-security) below) turned out to have never
+been committed to git or captured in any backup — its source only ever lived on archbox's
+disk. It was reconstructed from mikepc's still-live copy of the same table (after an
+initial, structurally-wrong first attempt built from a secondhand prose description
+instead of checking the real reference) and renamed back from `ringcatch_firewall` to
+`homelab`, since the RingCatch-specific name was misleading for what both tables actually
+are: whole-host firewalls, not anything k3s/container-scoped.
+
+See [homelab-infra](https://gitlab.com/molszewski423/homelab-infra) for the current,
+kept-in-sync node list, firewall ruleset, and operational docs — this phase is historical
+record of how the migration went, not a live reference.
+
+---
+
 
 ## Network Security
 
