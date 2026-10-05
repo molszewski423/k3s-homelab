@@ -313,6 +313,38 @@ record of how the migration went, not a live reference.
 
 ---
 
+## Phase 7 - Third Node Retired, Back to Two Nodes (2026-10-04)
+
+The Dell Inspiron (centosbook) was reinstalled with **openSUSE Leap 16.0** as `devsuse`, a
+development environment for the SUSE version of LocumView (a Guacamole-based VDI platform
+that runs in the `locumview` namespace). It was not rejoined to the cluster. A dev box gets
+package churn, rebuilds and reboots that shouldn't evict or strand pods, it's Wi-Fi only with
+8 GB RAM, and the remaining two nodes had plenty of headroom (CPU/memory requests at 21%/14%
+on mikepc and 37%/20% on debianbox). It talks to the cluster over Tailscale with a kubeconfig
+instead.
+
+**The reinstall caused an outage, because the node wasn't drained first.** `agency-landing`
+and `agency-tunnel` were nodeSelector-pinned to centosbook, so once it went away both pods
+sat in Pending/Terminating and ringcatch.io returned Cloudflare 530 for about an hour or two.
+Worse, `agency-landing` uses `imagePullPolicy: Never` with a `localhost/` image that only
+existed in centosbook's containerd, so simply repinning it wasn't enough. Fix:
+
+```bash
+cd ~/agency/landing && podman build -t localhost/agency-landing:latest -f Containerfile .
+podman save localhost/agency-landing:latest | sudo k3s ctr images import -
+for d in agency-landing agency-tunnel; do
+  kubectl -n agency patch deploy $d \
+    -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"mikepc"}}}}}'
+done
+kubectl delete node centosbook
+```
+
+**Lesson:** before wiping a node, grep the manifests for `nodeSelector` pins to it and for
+`imagePullPolicy: Never` images that only live in its local containerd, and `kubectl drain`
+it. The cluster is now mikepc (control plane + GPU) and debianbox (worker), both Debian 13.
+
+---
+
 
 ## Network Security
 
@@ -390,8 +422,9 @@ table. CrowdSec's firewall bouncer injects ban rules into the same ruleset.
 Config: `/etc/nftables-homelab.conf` on each node
 Service: `homelab-firewall.service` (enabled, persists across reboots)
 
-centosbook (Phase 5) additionally runs `firewalld`, CentOS's default — see Phase 5 above
-for why that needed its own separate fix on top of this table.
+centosbook (Phase 5) additionally ran `firewalld`, CentOS's default — see Phase 5 above
+for why that needed its own separate fix on top of this table. centosbook left the
+cluster in Phase 7.
 
 ### kubeconfig
 
