@@ -325,7 +325,7 @@ instead.
 
 **The reinstall caused an outage, because the node wasn't drained first.** `agency-landing`
 and `agency-tunnel` were nodeSelector-pinned to centosbook, so once it went away both pods
-sat in Pending/Terminating and ringcatch.io returned Cloudflare 530 for about an hour or two.
+sat in Pending/Terminating and ringcatch.io returned Cloudflare 530 from about 18:20 to 20:43 EDT (about 2 h 20 min).
 Worse, `agency-landing` uses `imagePullPolicy: Never` with a `localhost/` image that only
 existed in centosbook's containerd, so simply repinning it wasn't enough. Fix:
 
